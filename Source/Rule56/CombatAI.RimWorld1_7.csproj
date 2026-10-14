@@ -43,47 +43,13 @@
       <Private>false</Private>
     </Reference>
 
-    <!-- RimWorld 1.7/Waylith still exposes Unity API type identities through the
-         compatibility module assemblies. CAI directly consumes these types in its
-         GUI, placement workers, asset-bundle loader, input helpers, and UI code, so
-         they must be explicit compile references rather than relying on transitive
-         Assembly-CSharp metadata. -->
-    <Reference Include="UnityEngine" Condition="Exists('$(RimWorldAssemblyDir)\UnityEngine.dll')">
-      <HintPath>$(RimWorldAssemblyDir)\UnityEngine.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="UnityEngine.CoreModule">
-      <HintPath>$(RimWorldAssemblyDir)\UnityEngine.CoreModule.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="UnityEngine.TextRenderingModule">
-      <HintPath>$(RimWorldAssemblyDir)\UnityEngine.TextRenderingModule.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="UnityEngine.IMGUIModule">
-      <HintPath>$(RimWorldAssemblyDir)\UnityEngine.IMGUIModule.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="UnityEngine.AssetBundleModule" Condition="Exists('$(RimWorldAssemblyDir)\UnityEngine.AssetBundleModule.dll')">
-      <HintPath>$(RimWorldAssemblyDir)\UnityEngine.AssetBundleModule.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="UnityEngine.InputLegacyModule" Condition="Exists('$(RimWorldAssemblyDir)\UnityEngine.InputLegacyModule.dll')">
-      <HintPath>$(RimWorldAssemblyDir)\UnityEngine.InputLegacyModule.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="UnityEngine.InputModule" Condition="Exists('$(RimWorldAssemblyDir)\UnityEngine.InputModule.dll')">
-      <HintPath>$(RimWorldAssemblyDir)\UnityEngine.InputModule.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="UnityEngine.UI" Condition="Exists('$(RimWorldAssemblyDir)\UnityEngine.UI.dll')">
-      <HintPath>$(RimWorldAssemblyDir)\UnityEngine.UI.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="UnityEngine.UIModule" Condition="Exists('$(RimWorldAssemblyDir)\UnityEngine.UIModule.dll')">
-      <HintPath>$(RimWorldAssemblyDir)\UnityEngine.UIModule.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
+    <!-- RimWorld 1.7/Waylith redirects historical UnityEngine module identities to
+         UnityStubs at runtime. Roslyn does not apply those runtime redirects, so the
+         build-only facade projects forward the exact legacy type identities needed by
+         Assembly-CSharp signatures. Private=false keeps them out of 1.7/Assemblies. -->
+    <ProjectReference Include="..\BuildFacades\UnityEngine.CoreModule\UnityEngine.CoreModule.csproj" Private="false" />
+    <ProjectReference Include="..\BuildFacades\UnityEngine.TextRenderingModule\UnityEngine.TextRenderingModule.csproj" Private="false" />
+    <ProjectReference Include="..\BuildFacades\UnityEngine.IMGUIModule\UnityEngine.IMGUIModule.csproj" Private="false" />
 
     <Reference Include="0Harmony" Condition="'$(HarmonyAssembly)' != ''">
       <HintPath>$(HarmonyAssembly)</HintPath>
@@ -98,12 +64,6 @@
            Text="UnityStubs.dll was not found in $(RimWorldAssemblyDir). This project requires the RimWorld 1.7 / Waylith assembly set." />
     <Error Condition="!Exists('$(RimWorldAssemblyDir)\Waylith.dll')"
            Text="Waylith.dll was not found in $(RimWorldAssemblyDir). This project requires the RimWorld 1.7 / Waylith assembly set." />
-    <Error Condition="!Exists('$(RimWorldAssemblyDir)\UnityEngine.CoreModule.dll')"
-           Text="UnityEngine.CoreModule.dll was not found in $(RimWorldAssemblyDir). CAI directly consumes RimWorld 1.7 Unity compatibility types such as Vector2, Rect, and Color." />
-    <Error Condition="!Exists('$(RimWorldAssemblyDir)\UnityEngine.TextRenderingModule.dll')"
-           Text="UnityEngine.TextRenderingModule.dll was not found in $(RimWorldAssemblyDir). CAI directly consumes TextAnchor and text rendering compatibility types." />
-    <Error Condition="!Exists('$(RimWorldAssemblyDir)\UnityEngine.IMGUIModule.dll')"
-           Text="UnityEngine.IMGUIModule.dll was not found in $(RimWorldAssemblyDir). CAI directly consumes IMGUI types such as GUIStyle." />
     <Error Condition="'$(HarmonyAssembly)' == '' or !Exists('$(HarmonyAssembly)')"
            Text="Harmony 0Harmony.dll was not found. Pass -p:HarmonyAssembly=C:\path\to\0Harmony.dll." />
   </Target>
