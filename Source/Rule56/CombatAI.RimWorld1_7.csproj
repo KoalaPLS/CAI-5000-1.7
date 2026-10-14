@@ -15,6 +15,7 @@
     <GenerateDependencyFile>false</GenerateDependencyFile>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <DefineConstants>$(DefineConstants);RW_1_7</DefineConstants>
 
     <RimWorldDir Condition="'$(RimWorldDir)' == ''">C:\Steam\steamapps\common\RimWorld</RimWorldDir>
     <RimWorldAssemblyDir Condition="Exists('$(RimWorldDir)\Assembly-CSharp.dll')">$(RimWorldDir)</RimWorldAssemblyDir>
