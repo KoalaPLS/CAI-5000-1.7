@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>CombatAI</RootNamespace>
+    <AssemblyName>CombatAI</AssemblyName>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <OutputPath>..\..\1.7\Assemblies\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+
+    <RimWorldDir Condition="'$(RimWorldDir)' == ''">C:\Steam\steamapps\common\RimWorld</RimWorldDir>
+    <RimWorldAssemblyDir Condition="Exists('$(RimWorldDir)\Assembly-CSharp.dll')">$(RimWorldDir)</RimWorldAssemblyDir>
+    <RimWorldAssemblyDir Condition="'$(RimWorldAssemblyDir)' == '' and Exists('$(RimWorldDir)\RimWorldWin64_Data\Managed\Assembly-CSharp.dll')">$(RimWorldDir)\RimWorldWin64_Data\Managed</RimWorldAssemblyDir>
+
+    <HarmonyWorkshopDir Condition="'$(HarmonyWorkshopDir)' == ''">$(RimWorldDir)\..\..\workshop\content\294100\2009463077</HarmonyWorkshopDir>
+    <HarmonyAssembly Condition="'$(HarmonyAssembly)' == '' and Exists('$(HarmonyWorkshopDir)\Current\Assemblies\0Harmony.dll')">$(HarmonyWorkshopDir)\Current\Assemblies\0Harmony.dll</HarmonyAssembly>
+    <HarmonyAssembly Condition="'$(HarmonyAssembly)' == '' and Exists('$(HarmonyWorkshopDir)\1.7\Assemblies\0Harmony.dll')">$(HarmonyWorkshopDir)\1.7\Assemblies\0Harmony.dll</HarmonyAssembly>
+    <HarmonyAssembly Condition="'$(HarmonyAssembly)' == '' and Exists('$(HarmonyWorkshopDir)\Assemblies\0Harmony.dll')">$(HarmonyWorkshopDir)\Assemblies\0Harmony.dll</HarmonyAssembly>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="**\*.cs"
+             Exclude="ITRegionGridPrepatched.cs;bin\**\*;obj\**\*" />
+
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(RimWorldAssemblyDir)\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityStubs">
+      <HintPath>$(RimWorldAssemblyDir)\UnityStubs.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Waylith">
+      <HintPath>$(RimWorldAssemblyDir)\Waylith.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony" Condition="'$(HarmonyAssembly)' != ''">
+      <HintPath>$(HarmonyAssembly)</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="ValidateRimWorld17References" BeforeTargets="ResolveReferences">
+    <Error Condition="'$(RimWorldAssemblyDir)' == '' or !Exists('$(RimWorldAssemblyDir)\Assembly-CSharp.dll')"
+           Text="RimWorld 1.7 Assembly-CSharp.dll was not found. Pass -p:RimWorldDir=C:\path\to\RimWorld if your install is elsewhere." />
+    <Error Condition="!Exists('$(RimWorldAssemblyDir)\UnityStubs.dll')"
+           Text="UnityStubs.dll was not found in $(RimWorldAssemblyDir). This project requires the RimWorld 1.7 / Waylith assembly set." />
+    <Error Condition="!Exists('$(RimWorldAssemblyDir)\Waylith.dll')"
+           Text="Waylith.dll was not found in $(RimWorldAssemblyDir). This project requires the RimWorld 1.7 / Waylith assembly set." />
+    <Error Condition="'$(HarmonyAssembly)' == '' or !Exists('$(HarmonyAssembly)')"
+           Text="Harmony 0Harmony.dll was not found. Pass -p:HarmonyAssembly=C:\path\to\0Harmony.dll." />
+  </Target>
+</Project>
