@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
-using RimWorld;
 using UnityEngine;
 using Verse;
 
@@ -12,18 +11,29 @@ namespace CombatAI.Patches
     {
         public static IEnumerable<MethodBase> TargetMethods()
         {
-            // Match any instance Draw methods on Mote and MoteBubble to cover overloads
-            foreach (var m in typeof(Mote).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+            HashSet<MethodBase> methods = new HashSet<MethodBase>();
+            System.Type[] signature = { typeof(Vector3), typeof(bool) };
+
+            MethodInfo baseDrawAt = AccessTools.DeclaredMethod(typeof(Mote), "DrawAt", signature);
+            if (baseDrawAt != null)
             {
-                if (m.Name == "Draw") yield return m;
+                methods.Add(baseDrawAt);
             }
-            foreach (var m in typeof(MoteBubble).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+
+            // RimWorld 1.7/Waylith draws motes through protected DrawAt rather than a
+            // public Draw method. Patch only Mote subclasses that actually declare the
+            // exact DrawAt(Vector3,bool) override so the prefix can suppress the whole
+            // most-derived presentation path under CAI fog.
+            foreach (System.Type type in typeof(Mote).AllSubclasses())
             {
-                if (m.Name == "Draw") yield return m;
+                MethodInfo drawAt = AccessTools.DeclaredMethod(type, "DrawAt", signature);
+                if (drawAt != null && drawAt.HasMethodBody())
+                {
+                    methods.Add(drawAt);
+                }
             }
-            // Fallback: if nothing found, return a harmless local method so Harmony won't throw
-            var noop = typeof(Mote_Draw_Patch).GetMethod(nameof(Noop), BindingFlags.Static | BindingFlags.NonPublic);
-            if (noop != null) yield return noop;
+
+            return methods;
         }
 
         public static bool Prefix(Mote __instance)
@@ -34,31 +44,22 @@ namespace CombatAI.Patches
                 {
                     return true;
                 }
-                var fog = Pawn_Patch.fogThings;
+                MapComponent_FogGrid fog = Pawn_Patch.fogThings;
                 if (fog == null)
                 {
                     return true;
                 }
                 // Ensure the fog component belongs to the same map as the mote.
-                if (fog.map == null || __instance?.Map == null || fog.map != __instance.Map)
+                if (fog.map == null || __instance.Map == null || fog.map != __instance.Map)
                 {
                     return true;
                 }
-                try
-                {
-                    return !fog.IsFogged(__instance.Position);
-                }
-                catch
-                {
-                    return true;
-                }
+                return !fog.IsFogged(__instance.Position);
             }
             catch
             {
                 return true;
             }
         }
-
-        private static void Noop(Mote __instance) { }
     }
 }
