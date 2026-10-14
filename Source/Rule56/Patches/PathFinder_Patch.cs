@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Reflection;
+using CombatAI.Compatibility;
 using HarmonyLib;
 using UnityEngine;
 using Verse;
