@@ -42,6 +42,22 @@ internal static class Program
             Selector_Patch.Patch();
             LabelSuppressor_Patch.Patch();
 
+            // Dynamic TargetMethods() patchers can legally discover zero targets without
+            // necessarily throwing. Vanilla 1.7 surfaces that CAI requires therefore get
+            // explicit ownership checks after PatchAll.
+            RequireOwnedPatch(
+                method => method.DeclaringType == typeof(CastPositionFinder) &&
+                          method.Name == nameof(CastPositionFinder.TryFindCastPosition),
+                1,
+                "CastPositionFinder.TryFindCastPosition tactical patch");
+
+            RequireOwnedPatch(
+                method => method.Name == "DrawAt" &&
+                          method.DeclaringType != null &&
+                          typeof(Mote).IsAssignableFrom(method.DeclaringType),
+                1,
+                "Mote.DrawAt fog-suppression hook");
+
             // Several production manual patchers deliberately fail closed by logging and
             // returning instead of throwing. That is correct for a live mod, but a static
             // audit must not convert those swallowed failures into a false green result.
@@ -61,7 +77,7 @@ internal static class Program
                 2,
                 "GenMapUI.DrawPawnLabel fog-label hooks");
 
-            Console.WriteLine("AUDIT PASS: attribute targets, exact transpiler anchors, and required manual Harmony patches applied successfully.");
+            Console.WriteLine("AUDIT PASS: attribute targets, exact transpiler anchors, dynamic targets, and required manual Harmony patches applied successfully.");
             return 0;
         }
         catch (Exception exception)
@@ -94,11 +110,11 @@ internal static class Program
         if (matches.Count < minimumCount)
         {
             throw new InvalidOperationException(
-                $"Required manual patch '{label}' was not installed by {AuditHarmonyId}. " +
+                $"Required patch '{label}' was not installed by {AuditHarmonyId}. " +
                 $"Expected at least {minimumCount}, found {matches.Count}.");
         }
 
-        Console.WriteLine($"MANUAL PATCH PASS: {label} ({matches.Count})");
+        Console.WriteLine($"PATCH PASS: {label} ({matches.Count})");
     }
 
     private static bool IsOwnedByAudit(MethodBase method)
