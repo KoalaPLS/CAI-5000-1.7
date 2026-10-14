@@ -5,47 +5,49 @@ using System.Reflection;
 using HarmonyLib;
 using RimWorld;
 using Verse;
+
 namespace CombatAI.Patches
 {
     public static class Building_Turret_Patch
     {
         private static List<Type>       types;
-        private static List<MethodInfo> methods;
+        private static List<MethodInfo> spawnMethods;
+        private static List<MethodInfo> despawnMethods;
+
+        private static List<Type> TurretSubclasses =>
+            types ??= typeof(Building_TurretGun).AllSubclassesNonAbstract().ToList();
 
         [HarmonyPatch]
         private static class Building_Turret_SpawnSetup_Patch
         {
             public static bool Prepare()
             {
-                if (methods != null)
+                if (spawnMethods != null)
                 {
-                    return methods.Count != 0;
+                    return spawnMethods.Count != 0;
                 }
-                methods = new List<MethodInfo>();
-                foreach (Type t in types ?? (types = typeof(Building_TurretGun).AllSubclassesNonAbstract().ToList()))
+
+                spawnMethods = new List<MethodInfo>();
+                foreach (Type type in TurretSubclasses)
                 {
-                    if (typeof(Building_TurretGun).IsAssignableFrom(t))
+                    MethodInfo method = AccessTools.Method(type, nameof(Building_Turret.SpawnSetup));
+                    if (method != null && method.DeclaringType == type && method.HasMethodBody())
                     {
-                        continue;
-                    }
-                    MethodInfo method = AccessTools.Method(t, nameof(Building_Turret.SpawnSetup));
-                    if (method != null && method.DeclaringType == t && method.HasMethodBody())
-                    {
-                        methods.Add(method);
+                        spawnMethods.Add(method);
                     }
                 }
-                return methods.Count != 0;
+                return spawnMethods.Count != 0;
             }
 
             public static IEnumerable<MethodBase> TargetMethods()
             {
-                return methods;
+                return spawnMethods;
             }
 
             public static void Postfix(Building_TurretGun __instance)
             {
-                var comp = __instance.Map.GetComp_Fast<TurretTracker>();
-                if (comp != null) comp.Register(__instance);
+                TurretTracker tracker = __instance.Map?.GetComp_Fast<TurretTracker>();
+                tracker?.Register(__instance);
             }
         }
 
@@ -54,34 +56,32 @@ namespace CombatAI.Patches
         {
             public static bool Prepare()
             {
-                if (methods != null)
+                if (despawnMethods != null)
                 {
-                    return methods.Count != 0;
+                    return despawnMethods.Count != 0;
                 }
-                foreach (Type t in types ?? (types = typeof(Building_TurretGun).AllSubclassesNonAbstract().ToList()))
+
+                despawnMethods = new List<MethodInfo>();
+                foreach (Type type in TurretSubclasses)
                 {
-                    if (typeof(Building_TurretGun).IsAssignableFrom(t))
+                    MethodInfo method = AccessTools.Method(type, nameof(Building_Turret.DeSpawn));
+                    if (method != null && method.DeclaringType == type && method.HasMethodBody())
                     {
-                        continue;
-                    }
-                    MethodInfo method = AccessTools.Method(t, nameof(Building_Turret.SpawnSetup));
-                    if (method != null && method.DeclaringType == t && method.HasMethodBody())
-                    {
-                        methods.Add(method);
+                        despawnMethods.Add(method);
                     }
                 }
-                return methods.Count != 0;
+                return despawnMethods.Count != 0;
             }
 
             public static IEnumerable<MethodBase> TargetMethods()
             {
-                return methods;
+                return despawnMethods;
             }
 
             public static void Prefix(Building_TurretGun __instance)
             {
-                var comp = __instance.Map.GetComp_Fast<TurretTracker>();
-                if (comp != null) comp.DeRegister(__instance);
+                TurretTracker tracker = __instance.Map?.GetComp_Fast<TurretTracker>();
+                tracker?.DeRegister(__instance);
             }
         }
     }
