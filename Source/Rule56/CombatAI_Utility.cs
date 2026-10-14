@@ -79,7 +79,11 @@ namespace CombatAI
                 dutyDest = IntVec3.Invalid;
                 if (pawn.mindState.duty.focus.Cell.DistanceToSquared(pawn.Position) > Maths.Sqr(Maths.Max(pawn.mindState.duty.radius, 10)))
                 {
+#if RW_1_7
+                    PawnPath path = PathFinder17Compat.FindPath(pawn.Map, pawn.Position, pawn.mindState.duty.focus.Cell, pawn);
+#else
                     PawnPath path = CombatAI.Compatibility.PathFinderCompat.FindPath(pawn.Map, pawn.Position, pawn.mindState.duty.focus.Cell, pawn);
+#endif
                     if (path != null && (path.GetNodes()?.Count ?? 0) > 0)
                     {
                         maxDistFromPawn = Mathf.Clamp(maxDistFromPawn, 5f, 64f);
