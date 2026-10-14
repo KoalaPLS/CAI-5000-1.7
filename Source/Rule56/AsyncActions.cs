@@ -1,39 +1,41 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using Verse;
+
 namespace CombatAI
 {
     public class AsyncActions
     {
         private static readonly List<AsyncActions> running = new List<AsyncActions>();
-        private static           int               _globalInstanceCounter = 0;
+        private static int _globalInstanceCounter;
 
         private readonly int hashOffset;
 
-        public readonly  object locker_Main    = new object();
-        public readonly  object locker_offMain = new object();
-        private readonly int    mainLoopTickInterval;
+        public readonly object locker_Main = new object();
+        public readonly object locker_offMain = new object();
+        private readonly int mainLoopTickInterval;
 
-        private readonly List<Action>   queuedMainThreadActions = new List<Action>();
-        private readonly List<Action>   queuedOffThreadActions  = new List<Action>();
-        private readonly AutoResetEvent waitHandle              = new AutoResetEvent(false);
-        private readonly Thread         thread;
-        private          bool           mainThreadActionQueueEmpty;
+        private readonly List<Action> queuedMainThreadActions = new List<Action>();
+        private readonly List<Action> queuedOffThreadActions = new List<Action>();
+        private readonly AutoResetEvent waitHandle = new AutoResetEvent(false);
+        private readonly Thread thread;
+        private volatile bool alive = true;
+        private bool mainThreadActionQueueEmpty;
 
         public AsyncActions(int mainLoopTickInterval = 5)
         {
             this.mainLoopTickInterval = mainLoopTickInterval;
-            hashOffset                = System.Threading.Interlocked.Increment(ref _globalInstanceCounter) % 128;
-            thread                    = new Thread(OffMainThreadActionLoop);
+            hashOffset = Interlocked.Increment(ref _globalInstanceCounter) % 128;
+            thread = new Thread(OffMainThreadActionLoop)
+            {
+                IsBackground = true,
+                Name = "CombatAI.AsyncActions"
+            };
         }
 
-        public bool Alive
-        {
-            get;
-            private set;
-        } = true;
+        public bool Alive => alive;
 
         public void Start()
         {
@@ -48,25 +50,48 @@ namespace CombatAI
 
         public void Kill()
         {
-            Alive = false;
+            if (!alive)
+            {
+                running.Remove(this);
+                return;
+            }
+
+            alive = false;
             running.Remove(this);
+
+            lock (locker_Main)
+            {
+                queuedMainThreadActions.Clear();
+                mainThreadActionQueueEmpty = true;
+            }
+
+            lock (locker_offMain)
+            {
+                queuedOffThreadActions.Clear();
+            }
+
+            // Wake a worker blocked in WaitOne so it can observe alive == false and exit.
+            // Thread.Abort is unsupported on the RimWorld 1.7 / .NET 10 runtime and could
+            // deadlock the old Mono/Boehm runtime even before the migration.
             try
             {
-                lock (locker_Main)
-                {
-                    queuedMainThreadActions.Clear();
-                }
-                lock (locker_offMain)
-                {
-                    queuedOffThreadActions.Clear();
-                }
-                thread.Abort();
-                thread.Join(100);
-                waitHandle.Close();
+                waitHandle.Set();
             }
-            catch (Exception)
+            catch (ObjectDisposedException)
             {
+                return;
             }
+
+            if (thread.IsAlive && Thread.CurrentThread != thread)
+            {
+                if (!thread.Join(1000))
+                {
+                    Log.Warning("CAI: AsyncActions worker did not stop within 1000 ms; it will exit cooperatively after its current action returns.");
+                    return;
+                }
+            }
+
+            waitHandle.Dispose();
         }
 
         public static void KillAll()
@@ -79,8 +104,17 @@ namespace CombatAI
 
         public void EnqueueOffThreadAction(Action action)
         {
+            if (!alive || action == null)
+            {
+                return;
+            }
+
             lock (locker_offMain)
             {
+                if (!alive)
+                {
+                    return;
+                }
                 if (queuedOffThreadActions.Count > 1024)
                 {
                     Log.Error($"ISMA: AsyncActions is leaking memory with more than {queuedOffThreadActions.Count} actions queued!");
@@ -95,8 +129,17 @@ namespace CombatAI
 
         public void EnqueueMainThreadAction(Action action)
         {
+            if (!alive || action == null)
+            {
+                return;
+            }
+
             lock (locker_Main)
             {
+                if (!alive)
+                {
+                    return;
+                }
                 queuedMainThreadActions.Add(action);
                 mainThreadActionQueueEmpty = false;
             }
@@ -159,7 +202,7 @@ namespace CombatAI
 
         private void OffMainThreadActionLoop()
         {
-            while (Alive)
+            while (alive)
             {
                 Action action = DequeueOffThreadAction();
                 if (action != null)
@@ -168,16 +211,12 @@ namespace CombatAI
                     {
                         action();
                     }
-                    catch (ThreadAbortException)
-                    {
-                        throw;
-                    }
                     catch (Exception er)
                     {
                         Log.Error(er.ToString());
                     }
                 }
-                else
+                else if (alive)
                 {
                     waitHandle.WaitOne();
                 }
