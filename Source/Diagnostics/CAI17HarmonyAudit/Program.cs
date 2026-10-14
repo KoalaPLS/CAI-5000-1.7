@@ -23,6 +23,7 @@ internal static class Program
         Harmony harmony = new Harmony(AuditHarmonyId);
         Finder.Harmony = harmony;
         Finder.Settings = new Settings();
+        Harmony_CastPositionFinder.CastPositionFinder_TryFindCastPosition_Patch.RequireExactAuditAnchors = true;
 
         try
         {
@@ -60,7 +61,7 @@ internal static class Program
                 2,
                 "GenMapUI.DrawPawnLabel fog-label hooks");
 
-            Console.WriteLine("AUDIT PASS: attribute targets, transpilers, and required manual Harmony patches applied successfully.");
+            Console.WriteLine("AUDIT PASS: attribute targets, exact transpiler anchors, and required manual Harmony patches applied successfully.");
             return 0;
         }
         catch (Exception exception)
@@ -71,6 +72,7 @@ internal static class Program
         }
         finally
         {
+            Harmony_CastPositionFinder.CastPositionFinder_TryFindCastPosition_Patch.RequireExactAuditAnchors = false;
             try
             {
                 harmony.UnpatchAll(AuditHarmonyId);
