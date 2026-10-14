@@ -17,6 +17,16 @@ namespace CombatAI
                 cells_ids[i] = -1;
             }
         }
+
+#if RW_1_7
+        // The historical shared SightGrid constructor still carries the old two-argument
+        // Prepatcher call shape. On the native 1.7 build that symbol is a global alias to
+        // this class, so accept and deliberately ignore the obsolete grid id. There is
+        // still only one storage owner: the direct arrays above.
+        public ITRegionGridLegacy(Map map, int unusedHistoricalGridId) : this(map)
+        {
+        }
+#endif
         
         /// <summary>
         ///     Set region by id.
@@ -74,7 +84,7 @@ namespace CombatAI
         /// </summary>
         /// <param name="region">Region.</param>
         /// <returns>Number of sources.</returns>
-        public override int GetSignalNumByRegion(Region region)
+        public override int  GetSignalNumByRegion(Region region)
         {
             if (region != null)
             {
