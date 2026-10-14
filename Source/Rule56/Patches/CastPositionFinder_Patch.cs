@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -43,7 +44,9 @@ namespace CombatAI.Patches
         [HarmonyPatch(typeof(CastPositionFinder), nameof(CastPositionFinder.TryFindCastPosition))]
         public static class CastPositionFinder_TryFindCastPosition_Patch
         {
-            private static readonly FieldInfo fBestSpotPref = AccessTools.Field(typeof(CastPositionFinder), "bestSpotPref");
+            private static readonly FieldInfo  fBestSpot = AccessTools.Field(typeof(CastPositionFinder), "bestSpot");
+            private static readonly MethodInfo mWholeMap = AccessTools.Method(typeof(CellRect), nameof(CellRect.WholeMap), new[] { typeof(Map) });
+            private static readonly MethodInfo mFloodCellRect = AccessTools.Method(typeof(CastPositionFinder_TryFindCastPosition_Patch), nameof(FloodCellRect));
 
             public static void Prefix(ref CastPositionRequest newReq)
             {
@@ -67,7 +70,7 @@ namespace CombatAI.Patches
                         map              = pawn.Map;
                         avoidanceTracker = pawn.Map.GetComp_Fast<AvoidanceTracker>();
                         avoidanceTracker.TryGetReader(pawn, out avoidanceReader);
-                        dutyDest = pawn.TryGetNextDutyDest(request.maxRangeFromCaster);
+                        dutyDest = pawn.TryGetNextDutyDest(newReq.maxRangeFromCaster);
                         if (avoidanceReader != null)
                         {
                             grid = map.GetFloatGrid();
@@ -76,16 +79,14 @@ namespace CombatAI.Patches
                             if (sightReader != null)
                             {
                                 sightReader.armor          = pawn.GetArmorReport();
-                                request                    = newReq;
                                 interceptors               = map.GetComp_Fast<MapComponent_CombatAI>().interceptors;
                                 warmupTime                 = verb?.verbProps.warmupTime ?? 1;
                                 warmupTime                 = Mathf.Clamp(warmupTime, 0.5f, 0.8f);
                                 target                     = newReq.target;
                                 targetPosition             = target.Position;
                                 newReq.wantCoverFromTarget = true;
+                                request                    = newReq;
                                 skipped                    = false;
-                                //
-                                // map.debugDrawer.FlashCell(pawn.Position, 1, "dude", 100);
                                 return;
                             }
                         }
@@ -125,54 +126,101 @@ namespace CombatAI.Patches
                 map              = null;
             }
 
-            public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, ILGenerator generator)
+            public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
             {
-                List<CodeInstruction> codes    = instructions.ToList();
-                bool                  finished = false;
+                List<CodeInstruction> codes = instructions.ToList();
+                if (mWholeMap == null || fBestSpot == null || mFloodCellRect == null)
+                {
+                    Log.Error("ISMA: CastPositionFinder 1.7 transpiler prerequisites were not found; tactical cell weighting was left unpatched.");
+                    return codes;
+                }
+
+                int cellRectLocal = -1;
+                int wholeMapCall = -1;
                 for (int i = 0; i < codes.Count; i++)
                 {
-                    // Copy original instruction
-                    yield return codes[i];
-                    if (!finished)
+                    if (codes[i].Calls(mWholeMap))
                     {
-                        if (codes[i].OperandIs(fBestSpotPref))
-                        {
-                            // We expect the method to soon store the loaded CellRect into a local.
-                            // Find the next stloc.* instruction and insert a ldloc + call after it.
-                            finished = true;
-                            for (int j = i + 1; j < codes.Count; j++)
-                            {
-                                var op = codes[j].opcode;
-                                int? localIndex = null;
-                                if (op == OpCodes.Stloc || op == OpCodes.Stloc_S)
-                                {
-                                    if (codes[j].operand is LocalBuilder lb) localIndex = lb.LocalIndex;
-                                    else if (codes[j].operand is int idx) localIndex = idx;
-                                    else if (codes[j].operand is short s) localIndex = (int)s;
-                                }
-                                else if (op == OpCodes.Stloc_0) localIndex = 0;
-                                else if (op == OpCodes.Stloc_1) localIndex = 1;
-                                else if (op == OpCodes.Stloc_2) localIndex = 2;
-                                else if (op == OpCodes.Stloc_3) localIndex = 3;
+                        wholeMapCall = i;
+                        break;
+                    }
+                }
 
-                                if (localIndex.HasValue)
-                                {
-                                    // yield all instructions up to and including the store (they will be output by loop)
-                                    // then insert ldloc <localIndex> and call FloodCellRect
-                                    // advance i to j so outer loop continues after the store
-                                    for (int k = i + 1; k <= j; k++)
-                                    {
-                                        yield return codes[k];
-                                    }
-                                    yield return new CodeInstruction(OpCodes.Ldloc, localIndex.Value);
-                                    yield return new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(CastPositionFinder_TryFindCastPosition_Patch), nameof(FloodCellRect)));
-                                    i = j; // skip ahead
-                                    break;
-                                }
-                            }
+                if (wholeMapCall >= 0)
+                {
+                    for (int i = wholeMapCall + 1; i < codes.Count; i++)
+                    {
+                        if (TryGetStoredLocalIndex(codes[i], out cellRectLocal))
+                        {
+                            break;
                         }
                     }
                 }
+
+                if (cellRectLocal < 0)
+                {
+                    Log.Error("ISMA: CastPositionFinder 1.7 transpiler could not identify the CellRect local after CellRect.WholeMap; tactical cell weighting was left unpatched.");
+                    return codes;
+                }
+
+                int insertAt = -1;
+                for (int i = wholeMapCall + 1; i < codes.Count; i++)
+                {
+                    if (codes[i].opcode == OpCodes.Stsfld && codes[i].OperandIs(fBestSpot))
+                    {
+                        insertAt = i + 1;
+                        break;
+                    }
+                }
+
+                if (insertAt < 0)
+                {
+                    Log.Error("ISMA: CastPositionFinder 1.7 transpiler could not find the bestSpot reset after CellRect clipping; tactical cell weighting was left unpatched.");
+                    return codes;
+                }
+
+                // Current 1.7 constructs and clips the search CellRect before resetting
+                // bestSpot. Inject immediately after that reset, when the evaluation stack
+                // is empty and the final clipped rectangle is available.
+                codes.Insert(insertAt, new CodeInstruction(OpCodes.Ldloc, cellRectLocal));
+                codes.Insert(insertAt + 1, new CodeInstruction(OpCodes.Call, mFloodCellRect));
+                return codes;
+            }
+
+            private static bool TryGetStoredLocalIndex(CodeInstruction instruction, out int localIndex)
+            {
+                localIndex = -1;
+                OpCode op = instruction.opcode;
+                if (op == OpCodes.Stloc_0) { localIndex = 0; return true; }
+                if (op == OpCodes.Stloc_1) { localIndex = 1; return true; }
+                if (op == OpCodes.Stloc_2) { localIndex = 2; return true; }
+                if (op == OpCodes.Stloc_3) { localIndex = 3; return true; }
+                if (op != OpCodes.Stloc && op != OpCodes.Stloc_S)
+                {
+                    return false;
+                }
+
+                if (instruction.operand is LocalBuilder builder)
+                {
+                    localIndex = builder.LocalIndex;
+                    return true;
+                }
+                if (instruction.operand is int index)
+                {
+                    localIndex = index;
+                    return true;
+                }
+                if (instruction.operand is short shortIndex)
+                {
+                    localIndex = shortIndex;
+                    return true;
+                }
+                if (instruction.operand is byte byteIndex)
+                {
+                    localIndex = byteIndex;
+                    return true;
+                }
+                return false;
             }
 
             private static void FloodCellRect(CellRect rect)
