@@ -24,11 +24,12 @@ namespace CombatAI
             {
                 if ((attr = type.TryGetAttribute<LoadIf>()) != null && attr.packageId != null)
                 {
-                    bool loaded = LoadedModManager.RunningMods.Any(m => CombatAI.Compatibility.ModContentPackCompat.GetPackageIdPlayerFacing(m).ToLower() == attr.packageId || m.PackageId == attr.packageId);
-                    if (loaded)
+                    bool packageLoaded = LoadedModManager.RunningMods.Any(m => CombatAI.Compatibility.ModContentPackCompat.GetPackageIdPlayerFacing(m).ToLower() == attr.packageId || m.PackageId == attr.packageId);
+                    bool bindingsValid = packageLoaded;
+                    if (packageLoaded)
                     {
                         Log.Message($"CAI: attempting LoadIf for {attr.packageId}");
-                        // start loading defs
+                        // start loading defs / API bindings
                         foreach (FieldInfo field in AccessTools.GetDeclaredFields(type))
                         {
                             // check if the field is static and doesn't have unsaved attribute
@@ -36,69 +37,77 @@ namespace CombatAI
                             {
                                 bool success   = false;
                                 Type fieldType = field.FieldType;
-                                if (typeof(Def).IsAssignableFrom(fieldType))
+                                try
                                 {
-                                    field.SetValue(null, AccessTools.Method(typeof(DefDatabase<>).MakeGenericType(fieldType), "GetNamed").Invoke(null, new object[]
+                                    if (typeof(Def).IsAssignableFrom(fieldType))
                                     {
-                                        field.Name, false
-                                    }));
-                                    success = true;
-                                }
-                                else if (field.HasAttribute<LoadNamed>() && (named = field.TryGetAttribute<LoadNamed>())?.name != null)
-                                {
-                                    switch (named.type)
+                                        object value = AccessTools.Method(typeof(DefDatabase<>).MakeGenericType(fieldType), "GetNamed").Invoke(null, new object[]
+                                        {
+                                            field.Name, false
+                                        });
+                                        field.SetValue(null, value);
+                                        success = value != null;
+                                    }
+                                    else if (field.HasAttribute<LoadNamed>() && (named = field.TryGetAttribute<LoadNamed>())?.name != null)
                                     {
-                                        case LoadableType.Unspecified:
-                                            if (typeof(Type).IsAssignableFrom(fieldType))
+                                        object value = null;
+                                        switch (named.type)
+                                        {
+                                            case LoadableType.Unspecified:
+                                                if (typeof(Type).IsAssignableFrom(fieldType))
+                                                {
+                                                    value = AccessTools.TypeByName(named.name);
+                                                }
+                                                else if (typeof(FieldInfo).IsAssignableFrom(fieldType))
+                                                {
+                                                    value = AccessTools.Field(named.name);
+                                                }
+                                                else if (typeof(MethodInfo).IsAssignableFrom(fieldType))
+                                                {
+                                                    value = AccessTools.Method(named.name, named.prams);
+                                                }
+                                                break;
+                                            case LoadableType.Field:
+                                                value = AccessTools.Field(named.name);
+                                                break;
+                                            case LoadableType.Type:
+                                                value = AccessTools.TypeByName(named.name);
+                                                break;
+                                            case LoadableType.Constructor:
                                             {
-                                                field.SetValue(null, AccessTools.TypeByName(named.name));
-                                                success = true;
+                                                Type owner = AccessTools.TypeByName(named.name);
+                                                value = owner == null ? null : AccessTools.Constructor(owner, named.prams);
+                                                break;
                                             }
-                                            else if (typeof(FieldInfo).IsAssignableFrom(fieldType))
-                                            {
-                                                field.SetValue(null, AccessTools.Field(named.name));
-                                                success = true;
-                                            }
-                                            else if (typeof(MethodInfo).IsAssignableFrom(fieldType))
-                                            {
-                                                field.SetValue(null, AccessTools.Method(named.name, named.prams));
-                                                success = true;
-                                            }
-                                            break;
-                                        case LoadableType.Field:
-                                            field.SetValue(null, AccessTools.Field(named.name));
-                                            success = true;
-                                            break;
-                                        case LoadableType.Type:
-                                            field.SetValue(null, AccessTools.TypeByName(named.name));
-                                            success = true;
-                                            break;
-                                        case LoadableType.Constructor:
-                                            field.SetValue(null, AccessTools.Constructor(AccessTools.TypeByName(named.name), named.prams));
-                                            success = true;
-                                            break;
-                                        case LoadableType.Setter:
-                                            field.SetValue(null, AccessTools.PropertySetter(named.name));
-                                            success = true;
-                                            break;
-                                        case LoadableType.Getter:
-                                            field.SetValue(null, AccessTools.PropertyGetter(named.name));
-                                            success = true;
-                                            break;
-                                        case LoadableType.Method:
-                                            field.SetValue(null, AccessTools.Method(named.name, named.prams));
-                                            success = true;
-                                            break;
+                                            case LoadableType.Setter:
+                                                value = AccessTools.PropertySetter(named.name);
+                                                break;
+                                            case LoadableType.Getter:
+                                                value = AccessTools.PropertyGetter(named.name);
+                                                break;
+                                            case LoadableType.Method:
+                                                value = AccessTools.Method(named.name, named.prams);
+                                                break;
+                                        }
+                                        field.SetValue(null, value);
+                                        success = value != null;
+                                    }
+                                    else if (typeof(bool).IsAssignableFrom(fieldType) && field.Name == "active")
+                                    {
+                                        field.SetValue(null, true);
+                                        success = true;
                                     }
                                 }
-                                else if (typeof(bool).IsAssignableFrom(fieldType) && field.Name == "active")
+                                catch (Exception exception)
                                 {
-                                    field.SetValue(null, true);
-                                    success = true;
+                                    Log.Error($"CAI: Failed while binding '{field.Name}'({field.FieldType}) from '{attr.packageId}': {exception}");
+                                    success = false;
                                 }
+
                                 if (!success || field.GetValue(null) == null)
                                 {
-                                    Log.Error($"CAI: Failed to find '{field.Name}'({field.FieldType}) from '{attr.packageId}'");
+                                    bindingsValid = false;
+                                    Log.Error($"CAI: Failed to find '{field.Name}'({field.FieldType}) from '{attr.packageId}'. CAI compatibility for this mod will stay disabled.");
                                 }
                                 else
                                 {
@@ -107,13 +116,28 @@ namespace CombatAI
                             }
                         }
                     }
+
+                    bool loaded = packageLoaded && bindingsValid;
+                    if (packageLoaded && !loaded)
+                    {
+                        FieldInfo activeField = AccessTools.GetDeclaredFields(type)
+                            .FirstOrDefault(field => field.IsStatic && field.FieldType == typeof(bool) && field.Name == "active");
+                        activeField?.SetValue(null, false);
+                        Log.Warning($"CAI: Disabled compatibility bridge for '{attr.packageId}' because one or more required API bindings could not be resolved.");
+                    }
+
                     foreach (MethodInfo method in AccessTools.GetDeclaredMethods(type))
                     {
                         if (method.HasAttribute<RunIf>() && (runned = method.TryGetAttribute<RunIf>()) != null && loaded == runned.loaded)
                         {
-                            method.Invoke(null, new object[]
+                            try
                             {
-                            });
+                                method.Invoke(null, Array.Empty<object>());
+                            }
+                            catch (Exception exception)
+                            {
+                                Log.Error($"CAI: Compatibility callback '{type.FullName}.{method.Name}' failed for '{attr.packageId}': {exception}");
+                            }
                         }
                     }
                 }
