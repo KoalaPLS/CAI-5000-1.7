@@ -48,6 +48,11 @@ namespace CombatAI.Patches
             private static readonly MethodInfo mWholeMap = AccessTools.Method(typeof(CellRect), nameof(CellRect.WholeMap), new[] { typeof(Map) });
             private static readonly MethodInfo mFloodCellRect = AccessTools.Method(typeof(CastPositionFinder_TryFindCastPosition_Patch), nameof(FloodCellRect));
 
+            // Production deliberately fails open if a future game/modded IL shape drifts.
+            // The standalone 1.7 audit flips this on so an unverified anchor is a hard
+            // failure rather than a log line followed by a misleading green result.
+            public static bool RequireExactAuditAnchors { get; set; }
+
             public static void Prefix(ref CastPositionRequest newReq)
             {
                 if (ai_fightEnemies)
@@ -131,8 +136,9 @@ namespace CombatAI.Patches
                 List<CodeInstruction> codes = instructions.ToList();
                 if (mWholeMap == null || fBestSpot == null || mFloodCellRect == null)
                 {
-                    Log.Error("ISMA: CastPositionFinder 1.7 transpiler prerequisites were not found; tactical cell weighting was left unpatched.");
-                    return codes;
+                    return TranspilerAnchorFailure(
+                        "ISMA: CastPositionFinder 1.7 transpiler prerequisites were not found; tactical cell weighting was left unpatched.",
+                        codes);
                 }
 
                 int cellRectLocal = -1;
@@ -159,8 +165,9 @@ namespace CombatAI.Patches
 
                 if (cellRectLocal < 0)
                 {
-                    Log.Error("ISMA: CastPositionFinder 1.7 transpiler could not identify the CellRect local after CellRect.WholeMap; tactical cell weighting was left unpatched.");
-                    return codes;
+                    return TranspilerAnchorFailure(
+                        "ISMA: CastPositionFinder 1.7 transpiler could not identify the CellRect local after CellRect.WholeMap; tactical cell weighting was left unpatched.",
+                        codes);
                 }
 
                 int insertAt = -1;
@@ -175,8 +182,9 @@ namespace CombatAI.Patches
 
                 if (insertAt < 0)
                 {
-                    Log.Error("ISMA: CastPositionFinder 1.7 transpiler could not find the bestSpot reset after CellRect clipping; tactical cell weighting was left unpatched.");
-                    return codes;
+                    return TranspilerAnchorFailure(
+                        "ISMA: CastPositionFinder 1.7 transpiler could not find the bestSpot reset after CellRect clipping; tactical cell weighting was left unpatched.",
+                        codes);
                 }
 
                 // Current 1.7 constructs and clips the search CellRect before resetting
@@ -184,6 +192,17 @@ namespace CombatAI.Patches
                 // is empty and the final clipped rectangle is available.
                 codes.Insert(insertAt, new CodeInstruction(OpCodes.Ldloc, cellRectLocal));
                 codes.Insert(insertAt + 1, new CodeInstruction(OpCodes.Call, mFloodCellRect));
+                return codes;
+            }
+
+            private static IEnumerable<CodeInstruction> TranspilerAnchorFailure(string message, List<CodeInstruction> codes)
+            {
+                if (RequireExactAuditAnchors)
+                {
+                    throw new InvalidOperationException(message);
+                }
+
+                Log.Error(message);
                 return codes;
             }
 
