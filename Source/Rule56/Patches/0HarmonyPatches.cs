@@ -24,6 +24,24 @@ namespace CombatAI.Patches
             Log.Message("ISMA: Applying patches");
             // Run attribute-based patches
             Finder.Harmony.PatchAll();
+#if RW_1_7
+            // The ThinkNode job logger is debug-only. Harmony 3 treats an attributed
+            // patch class with zero discovered targets as an error, while performance
+            // helpers may intentionally suppress this dormant global postfix. Keep it
+            // out of PatchAll on 1.7 and install it only when the user actually enabled
+            // job logging.
+            if (Finder.Settings.Debug && Finder.Settings.Debug_LogJobs)
+            {
+                try
+                {
+                    ThinkNode_Patch.EnsureJobLoggingPatchInstalled();
+                }
+                catch (Exception exception)
+                {
+                    Log.Error($"ISMA: Failed to enable RimWorld 1.7 ThinkNode job logging: {exception}");
+                }
+            }
+#endif
             // Register any runtime-only patches
             try
             {
