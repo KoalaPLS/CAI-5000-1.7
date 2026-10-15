@@ -68,9 +68,9 @@ namespace CombatAI
 				result         = PersonalityResult.Default;
 				result.retreat = Rand.Range(0.0f, 2.0f);
 				result.duck    = Rand.Range(0.0f, 2.0f);
-				result.cover   = Rand.Range(0.5f, 2.0f);
 				result.sapping = Rand.Range(0.0f, 2.0f);
 				result.pathing = Rand.Range(0.5f, 2.0f);
+				result.cover   = Rand.Range(0.5f, 2.0f);
 				result.group   = Rand.Range(0.5f, 2.0f);
 				Rand.PopState();
 				TKVCache<int, Faction, PersonalityResult>.Put(faction.loadID, result);	
