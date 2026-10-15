@@ -77,6 +77,18 @@ namespace CombatAI.Patches
         }
 
 #if RW_1_7
+        [HarmonyPatch(typeof(CombatAIMod), nameof(CombatAIMod.DoSettingsWindowContents))]
+        private static class CombatAIMod_SettingsJobLogging_Patch
+        {
+            public static void Postfix()
+            {
+                if (Finder.Settings != null && Finder.Settings.Debug && Finder.Settings.Debug_LogJobs)
+                {
+                    EnsureJobLoggingPatchInstalled();
+                }
+            }
+        }
+
         public static void EnsureJobLoggingPatchInstalled()
         {
             if (jobLoggingPatchInstalled || Finder.Harmony == null)
