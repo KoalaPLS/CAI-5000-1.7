@@ -19,9 +19,7 @@ namespace CombatAI.Patches
             get => Finder.Settings.Debug && Finder.Settings.Debug_LogJobs;
         }
 
-#if !RW_1_7
         [HarmonyPatch]
-#endif
         private static class ThinkNode_TryIssueJobPackage_Patch
         {
             public static IEnumerable<MethodBase> TargetMethods()
