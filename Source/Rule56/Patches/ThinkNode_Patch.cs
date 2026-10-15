@@ -12,6 +12,9 @@ namespace CombatAI.Patches
     {
         private static          Pawn         curPawn;
         private static readonly HashSet<Job> processedJobs = new HashSet<Job>();
+#if RW_1_7
+        private static bool jobLoggingPatchInstalled;
+#endif
 
         private static bool Enabled
         {
@@ -19,7 +22,9 @@ namespace CombatAI.Patches
             get => Finder.Settings.Debug && Finder.Settings.Debug_LogJobs;
         }
 
+#if !RW_1_7
         [HarmonyPatch]
+#endif
         private static class ThinkNode_TryIssueJobPackage_Patch
         {
             public static IEnumerable<MethodBase> TargetMethods()
@@ -70,5 +75,47 @@ namespace CombatAI.Patches
                 }
             }
         }
+
+#if RW_1_7
+        public static void EnsureJobLoggingPatchInstalled()
+        {
+            if (jobLoggingPatchInstalled || Finder.Harmony == null)
+            {
+                return;
+            }
+
+            MethodInfo postfix = AccessTools.Method(
+                typeof(ThinkNode_TryIssueJobPackage_Patch),
+                nameof(ThinkNode_TryIssueJobPackage_Patch.Postfix));
+            if (postfix == null)
+            {
+                Log.Error("ISMA: Unable to resolve ThinkNode job-log postfix for RimWorld 1.7.");
+                return;
+            }
+
+            int patched = 0;
+            foreach (MethodBase method in ThinkNode_TryIssueJobPackage_Patch.TargetMethods())
+            {
+                try
+                {
+                    Finder.Harmony.Patch(method, postfix: new HarmonyMethod(postfix));
+                    patched++;
+                }
+                catch (Exception exception)
+                {
+                    Log.Error($"ISMA: Failed to install RimWorld 1.7 ThinkNode job-log postfix on {method}: {exception}");
+                }
+            }
+
+            if (patched == 0)
+            {
+                Log.Warning("ISMA: RimWorld 1.7 ThinkNode job logging was requested, but no TryIssueJobPackage targets were patched.");
+                return;
+            }
+
+            jobLoggingPatchInstalled = true;
+            Log.Message($"ISMA: RimWorld 1.7 ThinkNode job logging enabled on {patched} targets.");
+        }
+#endif
     }
 }
