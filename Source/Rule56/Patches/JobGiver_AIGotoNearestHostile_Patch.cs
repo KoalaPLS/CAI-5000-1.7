@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using HarmonyLib;
 using RimWorld;
 using UnityEngine;
@@ -53,6 +53,12 @@ namespace CombatAI.Patches
                                         cost: region => Maths.Min(reader.GetRegionAbsVisibilityToEnemies(region), 8 * Finder.P50) * 10, maxRegions: 512);
                     if (nearestEnemy != null && pawn.CanReach(nearestEnemy, PathEndMode.InteractionCell, Danger.Deadly, true, true, TraverseMode.PassDoors))
                     {
+                        if (RaidPenetrationPlanner.TryOverrideDoorBoundGoto(pawn, nearestEnemy, out Job penetrationJob))
+                        {
+                            __result = penetrationJob;
+                            return false;
+                        }
+
                         Job job = JobMaker.MakeJob(JobDefOf.Goto, nearestEnemy);
                         job.canBashDoors          = pawn.Faction == null || pawn.HostileTo(pawn.Map.ParentFaction);
                         job.canBashFences         = !pawn.RaceProps.Animal && job.canBashDoors;
