@@ -17,8 +17,8 @@ namespace CombatAI
         private const int SampleTicks = 120;
         private const int StallSamples = 2;
         private const int PlanCooldown = 180;
-        private const int CommitTicks = 1200;
-        private const int NoDamageTicks = 720;
+        private const int CommitTicks = 1800;
+        private const int NoDamageTicks = 1200;
         private const int RejectTicks = 1200;
         private const int MaxTargets = 8;
         private const int MaxTargetsScanned = 96;
@@ -296,8 +296,11 @@ namespace CombatAI
                     IntVec3 cell = nodes[i];
                     nodeCount++;
                     Building edifice = cell.GetEdifice(pawn.Map);
-                    if (IsBlocker(edifice))
+                    if (edifice != null && BlocksMovement(edifice))
                     {
+                        // V0.1 deliberately breaches player construction only. Do not accidentally
+                        // turn every stalled raid into a mountain-mining expedition.
+                        if (edifice.Faction != Faction.OfPlayer) return false;
                         blocker = edifice;
                         approach = previous;
                         break;
@@ -344,9 +347,9 @@ namespace CombatAI
             }
         }
 
-        private static bool IsBlocker(Building building)
+        private static bool BlocksMovement(Building building)
         {
-            if (building == null || building.Destroyed || building.Faction != Faction.OfPlayer) return false;
+            if (building == null || building.Destroyed) return false;
             if (building is Building_Door door) return !door.Open;
             return building.def.Fillage == FillCategory.Full || building.def.passability == Traversability.Impassable;
         }
