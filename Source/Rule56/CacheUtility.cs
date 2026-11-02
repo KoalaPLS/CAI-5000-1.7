@@ -11,6 +11,7 @@ namespace CombatAI
 			CompCache.ClearCaches();
 			SightUtility.ClearCache();
 			JobGiver_AITrashBuildingsDistant_Patch.ClearCache();
+			RaidPenetrationPlanner.ClearCache();
 			GenSight_Patch.ClearCache();
 			MetaCombatAttributeUtility.ClearCache();
 			LordToil_AssaultColony_Patch.ClearCache();
@@ -31,6 +32,7 @@ namespace CombatAI
 			CompCache.ClearCaches();
 			SightUtility.ClearCache();
 			JobGiver_AITrashBuildingsDistant_Patch.ClearCache();
+			RaidPenetrationPlanner.ClearCache();
 			GenSight_Patch.ClearCache();
 			MetaCombatAttributeUtility.ClearCache();
 			LordToil_AssaultColony_Patch.ClearCache();
